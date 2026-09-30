@@ -1,1 +1,29 @@
 
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Waze Travel",
+        "description": "Create a Waze route sensor.",
+        "data": {
+          "name": "Name",
+          "origin": "Origin",
+          "destination": "Destination",
+          "region": "Waze region",
+          "realtime": "Use live traffic",
+          "vehicle_type": "Vehicle type",
+          "avoid_toll_roads": "Avoid toll roads",
+          "avoid_subscription_roads": "Avoid subscription roads",
+          "avoid_ferries": "Avoid ferries",
+          "scan_interval": "Update interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to calculate this route with Waze. Check the origin and destination and try again."
+    },
+    "abort": {
+      "already_configured": "This Waze route is already configured."
+    }
+  }
+}
