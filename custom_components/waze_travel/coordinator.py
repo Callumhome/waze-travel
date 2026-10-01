@@ -1,3 +1,4 @@
+
 """Data coordinator for Waze Travel."""
 
 from __future__ import annotations
@@ -29,10 +30,41 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _resolve_location(hass: HomeAssistant, value: str) -> str:
+    """Resolve a Home Assistant location entity to coordinates."""
+    value = value.strip()
+
+    if not value.startswith(
+        ("person.", "zone.", "device_tracker.")
+    ):
+        return value
+
+    state = hass.states.get(value)
+    if state is None:
+        raise ValueError(
+            f"Home Assistant entity was not found: {value}"
+        )
+
+    latitude = state.attributes.get("latitude")
+    longitude = state.attributes.get("longitude")
+
+    if latitude is None or longitude is None:
+        raise ValueError(
+            f"Entity {value} has no latitude/longitude. "
+            "Check that its location tracker is updating."
+        )
+
+    return f"{latitude},{longitude}"
+
+
 class WazeTravelCoordinator(DataUpdateCoordinator):
     """Fetch route data from Waze."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+    ) -> None:
         """Initialize the coordinator."""
         self.entry = entry
 
@@ -53,19 +85,28 @@ class WazeTravelCoordinator(DataUpdateCoordinator):
         data = self.entry.data
 
         try:
+            origin = _resolve_location(
+                self.hass, data[CONF_ORIGIN]
+            )
+            destination = _resolve_location(
+                self.hass, data[CONF_DESTINATION]
+            )
+
             async with route_calculator.WazeRouteCalculator(
                 region=data[CONF_REGION],
                 timeout=DEFAULT_TIMEOUT,
             ) as client:
                 routes = await client.calc_routes(
-                    data[CONF_ORIGIN],
-                    data[CONF_DESTINATION],
+                    origin,
+                    destination,
                     vehicle_type=(
                         None
                         if data[CONF_VEHICLE_TYPE] == "car"
                         else data[CONF_VEHICLE_TYPE]
                     ),
-                    avoid_toll_roads=data[CONF_AVOID_TOLL_ROADS],
+                    avoid_toll_roads=data[
+                        CONF_AVOID_TOLL_ROADS
+                    ],
                     avoid_subscription_roads=data[
                         CONF_AVOID_SUBSCRIPTION_ROADS
                     ],
@@ -75,7 +116,10 @@ class WazeTravelCoordinator(DataUpdateCoordinator):
                 )
 
         except Exception as err:
-            _LOGGER.warning("Unable to retrieve Waze route: %s", err)
+            _LOGGER.warning(
+                "Unable to retrieve Waze route: %s",
+                err,
+            )
             raise UpdateFailed(
                 f"Unable to retrieve Waze route: {err}"
             ) from err
