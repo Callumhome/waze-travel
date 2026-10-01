@@ -7,7 +7,10 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 
 from .const import (
     CONF_AVOID_FERRIES,
@@ -30,14 +33,16 @@ class WazeTravelCoordinator(DataUpdateCoordinator):
     """Fetch route data from Waze."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the coordinator."""
         self.entry = entry
-        self._client = None
+
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=entry.data[CONF_SCAN_INTERVAL]),
-            update_method=self._async_update_data,
+            update_interval=timedelta(
+                seconds=entry.data[CONF_SCAN_INTERVAL]
+            ),
             always_update=False,
         )
 
@@ -46,29 +51,40 @@ class WazeTravelCoordinator(DataUpdateCoordinator):
         from pywaze import route_calculator
 
         data = self.entry.data
+
         try:
             async with route_calculator.WazeRouteCalculator(
-                region=data[CONF_REGION], timeout=DEFAULT_TIMEOUT
+                region=data[CONF_REGION],
+                timeout=DEFAULT_TIMEOUT,
             ) as client:
                 routes = await client.calc_routes(
                     data[CONF_ORIGIN],
                     data[CONF_DESTINATION],
                     vehicle_type=(
-                        None if data[CONF_VEHICLE_TYPE] == "car" else data[CONF_VEHICLE_TYPE]
+                        None
+                        if data[CONF_VEHICLE_TYPE] == "car"
+                        else data[CONF_VEHICLE_TYPE]
                     ),
                     avoid_toll_roads=data[CONF_AVOID_TOLL_ROADS],
-                    avoid_subscription_roads=data[CONF_AVOID_SUBSCRIPTION_ROADS],
+                    avoid_subscription_roads=data[
+                        CONF_AVOID_SUBSCRIPTION_ROADS
+                    ],
                     avoid_ferries=data[CONF_AVOID_FERRIES],
                     alternatives=3,
                     real_time=data[CONF_REALTIME],
                 )
+
         except Exception as err:
-            raise UpdateFailed(f"Unable to retrieve Waze route: {err}") from err
+            _LOGGER.warning("Unable to retrieve Waze route: %s", err)
+            raise UpdateFailed(
+                f"Unable to retrieve Waze route: {err}"
+            ) from err
 
         if not routes:
             raise UpdateFailed("Waze returned no routes")
 
         best = routes[0]
+
         return {
             "duration": best.duration,
             "distance": best.distance,
