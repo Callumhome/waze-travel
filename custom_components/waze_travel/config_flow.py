@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import voluptuous as vol
@@ -65,7 +66,9 @@ def _schema(defaults: dict) -> vol.Schema:
             ),
             vol.Required(
                 CONF_REALTIME,
-                default=defaults.get(CONF_REALTIME, DEFAULT_REALTIME),
+                default=defaults.get(
+                    CONF_REALTIME, DEFAULT_REALTIME
+                ),
             ): bool,
             vol.Required(
                 CONF_VEHICLE_TYPE,
@@ -81,7 +84,8 @@ def _schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_AVOID_TOLL_ROADS,
                 default=defaults.get(
-                    CONF_AVOID_TOLL_ROADS, DEFAULT_AVOID_TOLL_ROADS
+                    CONF_AVOID_TOLL_ROADS,
+                    DEFAULT_AVOID_TOLL_ROADS,
                 ),
             ): bool,
             vol.Required(
@@ -94,13 +98,15 @@ def _schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_AVOID_FERRIES,
                 default=defaults.get(
-                    CONF_AVOID_FERRIES, DEFAULT_AVOID_FERRIES
+                    CONF_AVOID_FERRIES,
+                    DEFAULT_AVOID_FERRIES,
                 ),
             ): bool,
             vol.Required(
                 CONF_SCAN_INTERVAL,
                 default=defaults.get(
-                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+                    CONF_SCAN_INTERVAL,
+                    DEFAULT_SCAN_INTERVAL,
                 ),
             ): vol.All(
                 vol.Coerce(int),
@@ -111,35 +117,29 @@ def _schema(defaults: dict) -> vol.Schema:
 
 
 def _resolve_location(hass: HomeAssistant, value: str) -> str:
-    """Resolve a Home Assistant location entity to Waze coordinates."""
+    """Resolve a Home Assistant location entity to GPS coordinates."""
     value = value.strip()
+    entity_id = value.lower()
 
-    if not value.startswith(
+    if not entity_id.startswith(
         ("person.", "zone.", "device_tracker.")
     ):
+        # Ordinary addresses and GPS coordinate strings pass through.
         return value
 
-    state = hass.states.get(value)
+    state = hass.states.get(entity_id)
     if state is None:
         raise ValueError(
-            f"Home Assistant entity was not found: {value}"
+            f"Home Assistant entity was not found: {entity_id}"
         )
 
     latitude = state.attributes.get("latitude")
     longitude = state.attributes.get("longitude")
 
-    # For a zone, use its configured coordinates if needed.
-    if value.startswith("zone.") and (
-        latitude is None or longitude is None
-    ):
-        raise ValueError(
-            f"Zone {value} does not have latitude and longitude"
-        )
-
     if latitude is None or longitude is None:
         raise ValueError(
-            f"Entity {value} does not currently have a location. "
-            "Check that its location tracker is updating."
+            f"Entity {entity_id} has no latitude/longitude. "
+            "Check that its location is available in Home Assistant."
         )
 
     return f"{latitude},{longitude}"
@@ -152,32 +152,41 @@ async def _test_route(
     """Validate the route using Waze."""
     from pywaze import route_calculator
 
+    # Resolve Home Assistant entities before entering the worker thread.
     origin = _resolve_location(hass, data[CONF_ORIGIN])
     destination = _resolve_location(hass, data[CONF_DESTINATION])
 
+    region = data[CONF_REGION]
+    vehicle_type = (
+        None
+        if data[CONF_VEHICLE_TYPE] == "car"
+        else data[CONF_VEHICLE_TYPE]
+    )
+
+    avoid_toll_roads = data[CONF_AVOID_TOLL_ROADS]
+    avoid_subscription_roads = data[
+        CONF_AVOID_SUBSCRIPTION_ROADS
+    ]
+    avoid_ferries = data[CONF_AVOID_FERRIES]
+    real_time = data[CONF_REALTIME]
+
     def calculate_route():
-        """Run the synchronous setup and SSL work outside the event loop."""
+        """Run the Waze client in a separate event loop."""
         async def run():
             async with route_calculator.WazeRouteCalculator(
-                region=data[CONF_REGION]
+                region=region
             ) as client:
                 return await client.calc_routes(
                     origin,
                     destination,
-                    vehicle_type=(
-                        None
-                        if data[CONF_VEHICLE_TYPE] == "car"
-                        else data[CONF_VEHICLE_TYPE]
+                    vehicle_type=vehicle_type,
+                    avoid_toll_roads=avoid_toll_roads,
+                    avoid_subscription_roads=(
+                        avoid_subscription_roads
                     ),
-                    avoid_toll_roads=data[CONF_AVOID_TOLL_ROADS],
-                    avoid_subscription_roads=data[
-                        CONF_AVOID_SUBSCRIPTION_ROADS
-                    ],
-                    avoid_ferries=data[CONF_AVOID_FERRIES],
-                    real_time=data[CONF_REALTIME],
+                    avoid_ferries=avoid_ferries,
+                    real_time=real_time,
                 )
-
-        import asyncio
 
         return asyncio.run(run())
 
@@ -187,9 +196,7 @@ async def _test_route(
         raise ValueError("Waze returned no routes")
 
 
-class WazeTravelConfigFlow(
-    config_entries.ConfigFlow, domain=DOMAIN
-):
+class WazeTravelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a Waze Travel config flow."""
 
     VERSION = 1
@@ -199,14 +206,16 @@ class WazeTravelConfigFlow(
         errors = {}
 
         if user_input is not None:
-            origin = user_input[CONF_ORIGIN].strip()
-            destination = user_input[CONF_DESTINATION].strip()
-
-            user_input[CONF_ORIGIN] = origin
-            user_input[CONF_DESTINATION] = destination
+            user_input[CONF_ORIGIN] = user_input[
+                CONF_ORIGIN
+            ].strip()
+            user_input[CONF_DESTINATION] = user_input[
+                CONF_DESTINATION
+            ].strip()
 
             await self.async_set_unique_id(
-                f"{origin}|{destination}|"
+                f"{user_input[CONF_ORIGIN]}|"
+                f"{user_input[CONF_DESTINATION]}|"
                 f"{user_input[CONF_REGION]}".lower()
             )
             self._abort_if_unique_id_configured()
