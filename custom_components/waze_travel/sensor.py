@@ -12,12 +12,16 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import WazeTravelCoordinator
 
+CONF_DISTANCE_UNIT = "distance_unit"
+DEFAULT_DISTANCE_UNIT = "mi"
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities
 ) -> None:
     """Set up Waze Travel sensors."""
     coordinator: WazeTravelCoordinator = hass.data[DOMAIN][entry.entry_id]
+
     async_add_entities(
         [
             WazeTravelDurationSensor(coordinator, entry),
@@ -29,9 +33,12 @@ async def async_setup_entry(
 class WazeTravelSensorBase(CoordinatorEntity, SensorEntity):
     """Base sensor."""
 
-    def __init__(self, coordinator: WazeTravelCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator: WazeTravelCoordinator, entry: ConfigEntry
+    ) -> None:
         super().__init__(coordinator)
         self.entry = entry
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -41,9 +48,12 @@ class WazeTravelSensorBase(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
+        """Return route details as sensor attributes."""
         data = self.coordinator.data
+
         if not data:
             return None
+
         return {
             "origin": self.entry.data["origin"],
             "destination": self.entry.data["destination"],
@@ -61,28 +71,64 @@ class WazeTravelDurationSensor(WazeTravelSensorBase):
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_icon = "mdi:car-clock"
 
-    def __init__(self, coordinator, entry):
+    def __init__(
+        self, coordinator: WazeTravelCoordinator, entry: ConfigEntry
+    ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_duration"
         self._attr_name = "Travel time"
 
     @property
     def native_value(self):
-        return round(self.coordinator.data["duration"], 1) if self.coordinator.data else None
+        """Return travel duration in minutes."""
+        if not self.coordinator.data:
+            return None
+
+        return round(self.coordinator.data["duration"], 1)
 
 
 class WazeTravelDistanceSensor(WazeTravelSensorBase):
     """Travel distance sensor."""
 
     _attr_device_class = SensorDeviceClass.DISTANCE
-    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
     _attr_icon = "mdi:map-marker-distance"
 
-    def __init__(self, coordinator, entry):
+    def __init__(
+        self, coordinator: WazeTravelCoordinator, entry: ConfigEntry
+    ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_distance"
         self._attr_name = "Distance"
 
     @property
+    def _distance_unit(self) -> str:
+        """Return the configured distance unit, defaulting to miles."""
+        return self.entry.options.get(
+            CONF_DISTANCE_UNIT,
+            self.entry.data.get(
+                CONF_DISTANCE_UNIT,
+                DEFAULT_DISTANCE_UNIT,
+            ),
+        )
+
+    @property
+    def native_unit_of_measurement(self):
+        """Return the selected distance unit."""
+        if self._distance_unit == "km":
+            return UnitOfLength.KILOMETERS
+
+        return UnitOfLength.MILES
+
+    @property
     def native_value(self):
-        return round(self.coordinator.data["distance"], 2) if self.coordinator.data else None
+        """Return distance in the selected unit."""
+        if not self.coordinator.data:
+            return None
+
+        distance_km = self.coordinator.data["distance"]
+
+        if self._distance_unit == "km":
+            return round(distance_km, 2)
+
+        distance_miles = distance_km * 0.621371
+        return round(distance_miles, 2)
