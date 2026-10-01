@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import (
+    CONF_DISTANCE_UNIT,
+    DEFAULT_DISTANCE_UNIT,
+    DOMAIN,
+)
 from .coordinator import WazeTravelCoordinator
-
-CONF_DISTANCE_UNIT = "distance_unit"
-DEFAULT_DISTANCE_UNIT = "mi"
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities,
 ) -> None:
     """Set up Waze Travel sensors."""
     coordinator: WazeTravelCoordinator = hass.data[DOMAIN][entry.entry_id]
@@ -34,7 +40,9 @@ class WazeTravelSensorBase(CoordinatorEntity, SensorEntity):
     """Base sensor."""
 
     def __init__(
-        self, coordinator: WazeTravelCoordinator, entry: ConfigEntry
+        self,
+        coordinator: WazeTravelCoordinator,
+        entry: ConfigEntry,
     ) -> None:
         super().__init__(coordinator)
         self.entry = entry
@@ -72,7 +80,9 @@ class WazeTravelDurationSensor(WazeTravelSensorBase):
     _attr_icon = "mdi:car-clock"
 
     def __init__(
-        self, coordinator: WazeTravelCoordinator, entry: ConfigEntry
+        self,
+        coordinator: WazeTravelCoordinator,
+        entry: ConfigEntry,
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_duration"
@@ -94,7 +104,9 @@ class WazeTravelDistanceSensor(WazeTravelSensorBase):
     _attr_icon = "mdi:map-marker-distance"
 
     def __init__(
-        self, coordinator: WazeTravelCoordinator, entry: ConfigEntry
+        self,
+        coordinator: WazeTravelCoordinator,
+        entry: ConfigEntry,
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_distance"
@@ -102,7 +114,7 @@ class WazeTravelDistanceSensor(WazeTravelSensorBase):
 
     @property
     def _distance_unit(self) -> str:
-        """Return the configured distance unit, defaulting to miles."""
+        """Return the selected unit."""
         return self.entry.options.get(
             CONF_DISTANCE_UNIT,
             self.entry.data.get(
@@ -116,7 +128,6 @@ class WazeTravelDistanceSensor(WazeTravelSensorBase):
         """Return the selected distance unit."""
         if self._distance_unit == "km":
             return UnitOfLength.KILOMETERS
-
         return UnitOfLength.MILES
 
     @property
@@ -125,10 +136,20 @@ class WazeTravelDistanceSensor(WazeTravelSensorBase):
         if not self.coordinator.data:
             return None
 
-        distance_km = self.coordinator.data["distance"]
+        distance_km = float(self.coordinator.data["distance"])
 
         if self._distance_unit == "km":
             return round(distance_km, 2)
 
-        distance_miles = distance_km * 0.621371
-        return round(distance_miles, 2)
+        return round(distance_km * 0.621371, 2)
+
+    async def async_added_to_hass(self) -> None:
+        """Register option changes and refresh the sensor."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self.entry.add_update_listener(self._options_updated)
+        )
+
+    async def _options_updated(self, hass, entry) -> None:
+        """Refresh the sensor after its options change."""
+        self.async_write_ha_state()
