@@ -2,11 +2,11 @@
   "domain": "waze_travel",
   "name": "Waze Travel",
   "version": "0.1.0",
-  "documentation": "https://github.com/REPLACE_ME/waze-travel",
-  "issue_tracker": "https://github.com/REPLACE_ME/waze-travel/issues",
-  "codeowners": [],
+  "documentation": "https://github.com/Callumhome/waze-travel",
+  "issue_tracker": "https://github.com/Callumhome/waze-travel/issues",
+  "codeowners": ["@Callumhome"],
   "config_flow": true,
   "iot_class": "cloud_polling",
-  "requirements": ["pywaze==1.2.0"],
+  "requirements": ["pywaze==1.2.1"],
   "integration_type": "service"
 }
