@@ -11,10 +11,14 @@
           "region": "Waze region",
           "realtime": "Use live traffic",
           "vehicle_type": "Vehicle type",
+          "distance_unit": "Distance unit",
           "avoid_toll_roads": "Avoid toll roads",
           "avoid_subscription_roads": "Avoid subscription roads",
           "avoid_ferries": "Avoid ferries",
           "scan_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "distance_unit": "Choose miles or kilometres for the distance sensor. Miles is the default."
         }
       }
     },
@@ -23,6 +27,17 @@
     },
     "abort": {
       "already_configured": "This Waze route is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Waze Travel options",
+        "description": "Configure your Waze Travel preferences.",
+        "data": {
+          "distance_unit": "Distance unit"
+        }
+      }
     }
   }
 }
