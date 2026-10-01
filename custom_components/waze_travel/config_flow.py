@@ -1,3 +1,4 @@
+
 """Config flow for Waze Travel."""
 
 from __future__ import annotations
@@ -5,8 +6,10 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import selector
 
 from .const import (
@@ -67,8 +70,7 @@ def _schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_VEHICLE_TYPE,
                 default=defaults.get(
-                    CONF_VEHICLE_TYPE,
-                    DEFAULT_VEHICLE_TYPE,
+                    CONF_VEHICLE_TYPE, DEFAULT_VEHICLE_TYPE
                 ),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -79,8 +81,7 @@ def _schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_AVOID_TOLL_ROADS,
                 default=defaults.get(
-                    CONF_AVOID_TOLL_ROADS,
-                    DEFAULT_AVOID_TOLL_ROADS,
+                    CONF_AVOID_TOLL_ROADS, DEFAULT_AVOID_TOLL_ROADS
                 ),
             ): bool,
             vol.Required(
@@ -93,15 +94,13 @@ def _schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_AVOID_FERRIES,
                 default=defaults.get(
-                    CONF_AVOID_FERRIES,
-                    DEFAULT_AVOID_FERRIES,
+                    CONF_AVOID_FERRIES, DEFAULT_AVOID_FERRIES
                 ),
             ): bool,
             vol.Required(
                 CONF_SCAN_INTERVAL,
                 default=defaults.get(
-                    CONF_SCAN_INTERVAL,
-                    DEFAULT_SCAN_INTERVAL,
+                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                 ),
             ): vol.All(
                 vol.Coerce(int),
@@ -111,36 +110,85 @@ def _schema(defaults: dict) -> vol.Schema:
     )
 
 
-async def _test_route(data: dict) -> None:
-    """Validate the route by asking Waze for one calculation."""
-    from pywaze import route_calculator
+def _resolve_location(hass: HomeAssistant, value: str) -> str:
+    """Resolve a Home Assistant location entity to Waze coordinates."""
+    value = value.strip()
 
-    async with route_calculator.WazeRouteCalculator(
-        region=data[CONF_REGION],
-    ) as client:
-        routes = await client.calc_routes(
-            data[CONF_ORIGIN],
-            data[CONF_DESTINATION],
-            vehicle_type=(
-                None
-                if data[CONF_VEHICLE_TYPE] == "car"
-                else data[CONF_VEHICLE_TYPE]
-            ),
-            avoid_toll_roads=data[CONF_AVOID_TOLL_ROADS],
-            avoid_subscription_roads=data[
-                CONF_AVOID_SUBSCRIPTION_ROADS
-            ],
-            avoid_ferries=data[CONF_AVOID_FERRIES],
-            real_time=data[CONF_REALTIME],
+    if not value.startswith(
+        ("person.", "zone.", "device_tracker.")
+    ):
+        return value
+
+    state = hass.states.get(value)
+    if state is None:
+        raise ValueError(
+            f"Home Assistant entity was not found: {value}"
         )
 
-        if not routes:
-            raise ValueError("No routes returned by Waze")
+    latitude = state.attributes.get("latitude")
+    longitude = state.attributes.get("longitude")
+
+    # For a zone, use its configured coordinates if needed.
+    if value.startswith("zone.") and (
+        latitude is None or longitude is None
+    ):
+        raise ValueError(
+            f"Zone {value} does not have latitude and longitude"
+        )
+
+    if latitude is None or longitude is None:
+        raise ValueError(
+            f"Entity {value} does not currently have a location. "
+            "Check that its location tracker is updating."
+        )
+
+    return f"{latitude},{longitude}"
+
+
+async def _test_route(
+    hass: HomeAssistant,
+    data: dict,
+) -> None:
+    """Validate the route using Waze."""
+    from pywaze import route_calculator
+
+    origin = _resolve_location(hass, data[CONF_ORIGIN])
+    destination = _resolve_location(hass, data[CONF_DESTINATION])
+
+    def calculate_route():
+        """Run the synchronous setup and SSL work outside the event loop."""
+        async def run():
+            async with route_calculator.WazeRouteCalculator(
+                region=data[CONF_REGION]
+            ) as client:
+                return await client.calc_routes(
+                    origin,
+                    destination,
+                    vehicle_type=(
+                        None
+                        if data[CONF_VEHICLE_TYPE] == "car"
+                        else data[CONF_VEHICLE_TYPE]
+                    ),
+                    avoid_toll_roads=data[CONF_AVOID_TOLL_ROADS],
+                    avoid_subscription_roads=data[
+                        CONF_AVOID_SUBSCRIPTION_ROADS
+                    ],
+                    avoid_ferries=data[CONF_AVOID_FERRIES],
+                    real_time=data[CONF_REALTIME],
+                )
+
+        import asyncio
+
+        return asyncio.run(run())
+
+    routes = await hass.async_add_executor_job(calculate_route)
+
+    if not routes:
+        raise ValueError("Waze returned no routes")
 
 
 class WazeTravelConfigFlow(
-    config_entries.ConfigFlow,
-    domain=DOMAIN,
+    config_entries.ConfigFlow, domain=DOMAIN
 ):
     """Handle a Waze Travel config flow."""
 
@@ -151,21 +199,25 @@ class WazeTravelConfigFlow(
         errors = {}
 
         if user_input is not None:
+            origin = user_input[CONF_ORIGIN].strip()
+            destination = user_input[CONF_DESTINATION].strip()
+
+            user_input[CONF_ORIGIN] = origin
+            user_input[CONF_DESTINATION] = destination
+
             await self.async_set_unique_id(
-                (
-                    f"{user_input[CONF_ORIGIN]}|"
-                    f"{user_input[CONF_DESTINATION]}|"
-                    f"{user_input[CONF_REGION]}"
-                ).lower()
+                f"{origin}|{destination}|"
+                f"{user_input[CONF_REGION]}".lower()
             )
             self._abort_if_unique_id_configured()
 
             try:
-                await _test_route(user_input)
+                await _test_route(self.hass, user_input)
             except Exception as err:
                 _LOGGER.warning(
                     "Unable to validate Waze route: %s",
                     err,
+                    exc_info=True,
                 )
                 errors["base"] = "cannot_connect"
             else:
