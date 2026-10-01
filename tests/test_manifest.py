@@ -9,5 +9,5 @@ def test_manifest():
 
     assert manifest["domain"] == "waze_travel"
     assert manifest["version"] == "0.1.0"
-    assert "pywaze==1.2.1" in manifest["requirements"]
+    assert "pywaze==1.2.0" in manifest["requirements"]
     assert manifest["config_flow"] is True
