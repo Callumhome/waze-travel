@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 DOMAIN = "waze_travel"
+
 CONF_ORIGIN = "origin"
 CONF_DESTINATION = "destination"
 CONF_REGION = "region"
@@ -13,17 +14,23 @@ CONF_AVOID_SUBSCRIPTION_ROADS = "avoid_subscription_roads"
 CONF_AVOID_FERRIES = "avoid_ferries"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_BASE_COORDINATES = "base_coordinates"
+CONF_DISTANCE_UNIT = "distance_unit"
 
 DEFAULT_REGION = "EU"
 DEFAULT_REALTIME = True
 DEFAULT_VEHICLE_TYPE = "car"
 DEFAULT_SCAN_INTERVAL = 300
+DEFAULT_DISTANCE_UNIT = "mi"
+
 MIN_SCAN_INTERVAL = 60
+
 DEFAULT_AVOID_TOLL_ROADS = False
 DEFAULT_AVOID_SUBSCRIPTION_ROADS = False
 DEFAULT_AVOID_FERRIES = False
 
 REGIONS = ["US", "NA", "EU", "IL", "AU"]
 VEHICLE_TYPES = ["car", "taxi", "motorcycle"]
+DISTANCE_UNITS = ["mi", "km"]
+
 DEFAULT_TIMEOUT = 60
 UPDATE_TIMEOUT = timedelta(seconds=DEFAULT_TIMEOUT)
