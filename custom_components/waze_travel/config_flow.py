@@ -1,4 +1,3 @@
-
 """Config flow for Waze Travel."""
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ from .const import (
     CONF_AVOID_SUBSCRIPTION_ROADS,
     CONF_AVOID_TOLL_ROADS,
     CONF_DESTINATION,
+    CONF_DISTANCE_UNIT,
     CONF_ORIGIN,
     CONF_REALTIME,
     CONF_REGION,
@@ -26,11 +26,13 @@ from .const import (
     DEFAULT_AVOID_FERRIES,
     DEFAULT_AVOID_SUBSCRIPTION_ROADS,
     DEFAULT_AVOID_TOLL_ROADS,
+    DEFAULT_DISTANCE_UNIT,
     DEFAULT_REALTIME,
     DEFAULT_REGION,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VEHICLE_TYPE,
     DOMAIN,
+    DISTANCE_UNITS,
     MIN_SCAN_INTERVAL,
     REGIONS,
     VEHICLE_TYPES,
@@ -82,6 +84,18 @@ def _schema(defaults: dict) -> vol.Schema:
                 )
             ),
             vol.Required(
+                CONF_DISTANCE_UNIT,
+                default=defaults.get(
+                    CONF_DISTANCE_UNIT,
+                    DEFAULT_DISTANCE_UNIT,
+                ),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=DISTANCE_UNITS,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
                 CONF_AVOID_TOLL_ROADS,
                 default=defaults.get(
                     CONF_AVOID_TOLL_ROADS,
@@ -124,10 +138,10 @@ def _resolve_location(hass: HomeAssistant, value: str) -> str:
     if not entity_id.startswith(
         ("person.", "zone.", "device_tracker.")
     ):
-        # Ordinary addresses and GPS coordinate strings pass through.
         return value
 
     state = hass.states.get(entity_id)
+
     if state is None:
         raise ValueError(
             f"Home Assistant entity was not found: {entity_id}"
@@ -152,7 +166,6 @@ async def _test_route(
     """Validate the route using Waze."""
     from pywaze import route_calculator
 
-    # Resolve Home Assistant entities before entering the worker thread.
     origin = _resolve_location(hass, data[CONF_ORIGIN])
     destination = _resolve_location(hass, data[CONF_DESTINATION])
 
@@ -172,6 +185,7 @@ async def _test_route(
 
     def calculate_route():
         """Run the Waze client in a separate event loop."""
+
         async def run():
             async with route_calculator.WazeRouteCalculator(
                 region=region
