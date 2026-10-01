@@ -96,8 +96,7 @@ def _schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_AVOID_TOLL_ROADS,
                 default=defaults.get(
-                    CONF_AVOID_TOLL_ROADS,
-                    DEFAULT_AVOID_TOLL_ROADS,
+                    CONF_AVOID_TOLL_ROADS, DEFAULT_AVOID_TOLL_ROADS
                 ),
             ): bool,
             vol.Required(
@@ -172,7 +171,10 @@ def _resolve_location(hass: HomeAssistant, value: str) -> str:
     return f"{latitude},{longitude}"
 
 
-async def _test_route(hass: HomeAssistant, data: dict) -> None:
+async def _test_route(
+    hass: HomeAssistant,
+    data: dict,
+) -> None:
     """Validate the route using Waze."""
     from pywaze import route_calculator
 
@@ -186,11 +188,6 @@ async def _test_route(hass: HomeAssistant, data: dict) -> None:
         else data[CONF_VEHICLE_TYPE]
     )
 
-    avoid_toll_roads = data[CONF_AVOID_TOLL_ROADS]
-    avoid_subscription_roads = data[CONF_AVOID_SUBSCRIPTION_ROADS]
-    avoid_ferries = data[CONF_AVOID_FERRIES]
-    real_time = data[CONF_REALTIME]
-
     def calculate_route():
         """Run the Waze client in a separate event loop."""
 
@@ -202,10 +199,12 @@ async def _test_route(hass: HomeAssistant, data: dict) -> None:
                     origin,
                     destination,
                     vehicle_type=vehicle_type,
-                    avoid_toll_roads=avoid_toll_roads,
-                    avoid_subscription_roads=avoid_subscription_roads,
-                    avoid_ferries=avoid_ferries,
-                    real_time=real_time,
+                    avoid_toll_roads=data[CONF_AVOID_TOLL_ROADS],
+                    avoid_subscription_roads=data[
+                        CONF_AVOID_SUBSCRIPTION_ROADS
+                    ],
+                    avoid_ferries=data[CONF_AVOID_FERRIES],
+                    real_time=data[CONF_REALTIME],
                 )
 
         return asyncio.run(run())
@@ -216,8 +215,10 @@ async def _test_route(hass: HomeAssistant, data: dict) -> None:
         raise ValueError("Waze returned no routes")
 
 
-class WazeTravelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a Waze Travel config flow."""
+class WazeTravelConfigFlow(
+    config_entries.ConfigFlow, domain=DOMAIN
+):
+    """Handle the Waze Travel config flow."""
 
     VERSION = 1
 
@@ -227,9 +228,9 @@ class WazeTravelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             user_input[CONF_ORIGIN] = user_input[CONF_ORIGIN].strip()
-            user_input[CONF_DESTINATION] = (
-                user_input[CONF_DESTINATION].strip()
-            )
+            user_input[CONF_DESTINATION] = user_input[
+                CONF_DESTINATION
+            ].strip()
 
             await self.async_set_unique_id(
                 f"{user_input[CONF_ORIGIN]}|"
@@ -261,7 +262,9 @@ class WazeTravelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
         """Create the options flow."""
         return WazeTravelOptionsFlow()
 
